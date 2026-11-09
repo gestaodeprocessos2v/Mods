@@ -5,7 +5,13 @@ Todos os mods ficam neste repositório, cada um em sua própria pasta dentro de 
 
 ## Instalar um mod
 
-No prompt do Claude Code (terminal):
+No prompt do Claude Code (terminal), por exemplo para o `ribbon-pt`:
+
+```
+/plugin install ribbon-pt --marketplace gestaodeprocessos2v/mods
+```
+
+Para qualquer outro mod, troque pelo nome dele:
 
 ```
 /plugin install <nome-do-mod> --marketplace gestaodeprocessos2v/mods
@@ -74,4 +80,4 @@ Quem já instalou atualiza com `claude plugin update <nome-do-mod>`.
 
 | Mod | Descrição | Versão |
 |-----|-----------|--------|
-| _(nenhum ainda)_ | | |
+| [ribbon-pt](mods/ribbon-pt) | Faixa acima do prompt com o uso das janelas de 5h e 7 dias, quando renovam, e se o cache está quente ou frio com o custo da próxima mensagem | 1.0.4 |

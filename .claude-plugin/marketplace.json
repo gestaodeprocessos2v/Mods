@@ -1,6 +1,14 @@
 {
   "name": "mods",
-  "owner": { "name": "gestaodeprocessos2v" },
+  "owner": {
+    "name": "gestaodeprocessos2v"
+  },
   "description": "Meus mods para o Claude Code",
-  "plugins": []
+  "plugins": [
+    {
+      "name": "ribbon-pt",
+      "source": "./mods/ribbon-pt",
+      "description": "ribbon em português: uso restante, horários de renovação e se o cache está quente ou frio, com o custo da próxima mensagem."
+    }
+  ]
 }

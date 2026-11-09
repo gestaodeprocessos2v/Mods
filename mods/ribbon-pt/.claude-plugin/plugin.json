@@ -1,0 +1,9 @@
+{
+  "name": "ribbon-pt",
+  "version": "1.0.4",
+  "description": "ribbon em português: faixa acima do prompt com o uso restante das janelas de 5 horas e 7 dias, quando cada uma renova, e se o cache está quente ou frio com o custo da próxima mensagem.",
+  "author": { "name": "Jay E (tradução local)", "url": "https://robonuggets.com" },
+  "homepage": "https://github.com/robonuggets/ribbon",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

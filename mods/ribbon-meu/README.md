@@ -5,7 +5,7 @@ Versão personalizada do [ribbon-pt](../ribbon-pt), que é a tradução para o p
 
 Mostra uma faixa acima do prompt com o uso das janelas de 5 horas e 7 dias, quando cada uma
 renova, quanto do contexto já foi consumido, e se o cache do prompt está quente ou frio, com o
-custo da próxima mensagem.
+quantos tokens a próxima mensagem vai recachear ou ler do cache.
 
 > Não instale junto com o `ribbon-pt`: os dois desenham a mesma faixa e ela apareceria duas vezes.
 
@@ -16,6 +16,11 @@ custo da próxima mensagem.
 ```
 
 ## Mudanças em relação ao ribbon-pt
+
+### 0.3.0
+- O custo em dólar (preços da API) foi trocado por tokens: a faixa mostra quantos tokens a
+  próxima mensagem vai recachear (cache frio) ou ler do cache (cache quente).
+- O cartão expandido não tem mais a coluna de custo por modelo.
 
 ### 0.2.0
 - Removidas as barras de bolinhas (●●●···) das janelas 5H e 7D; fica só o percentual.

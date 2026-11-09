@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { CacheFacts, Ctx, Fold, Window } from '../types'
 import {
   BG, HUE, INK, MUTED, ORANGE, ROBO_SIZE, TEXT, TTL_MIN, TTL_MS, WORD,
-  bandPx, cardSvg, chipSvg, costOf, familyOf, fmtIdle, kindOf, mineModel, roboSvg, tok, usd,
+  bandPx, cardSvg, chipSvg, fmtIdle, kindOf, roboSvg, tok,
 } from './cache-art'
 import type { CacheView } from './cache-art'
 
@@ -15,8 +15,8 @@ import type { CacheView } from './cache-art'
 // use: green under 60%, orange from 60% to under 80%, red from 80%.
 //
 // After the first reply it also shows the prompt cache: WARM (red, Robo bobbing)
-// for an hour after the last request, then COLD (blue, Robo frozen) with what the
-// next message costs to re-cache. Hide / Show folds the card; warm starts folded,
+// for an hour after the last request, then COLD (blue, Robo frozen) with the
+// tokens the next message re-caches. Hide / Show folds the card; warm starts folded,
 // cold starts open, and a choice holds until the cache flips. Zero token cost:
 // it reads the engine's own figures and draws.
 
@@ -76,7 +76,6 @@ export const viewOf = (c: CacheFacts | null, now: number): CacheView | null => {
     idleMin: Math.floor(idleMs / 60000),
     tokens: c.tokens,
     window: c.window,
-    mine: familyOf(c.model),
   }
 }
 
@@ -269,7 +268,6 @@ export const register: Register = on => {
     const mode = view.mode
     const cold = mode === 'cold'
     const hue = HUE[mode]
-    const mine = mineModel(view)
     const stored = await read($, fold)
     // Folding needs the card, and the card is a drawing: the terminal stays folded.
     const open = Svg !== null && (stored && stored.mode === mode ? stored.open : cold)
@@ -290,8 +288,9 @@ export const register: Register = on => {
     const summary = cold
       ? [
           <Text key="idle" color={hue} bold>{` ${view.idle}`}</Text>,
-          mine ? <Text key="dot" color={MUTED}> · </Text> : null,
-          mine ? <Text key="cost" color={TEXT} bold>{usd(costOf(mine, mode, view.tokens))}</Text> : null,
+          <Text key="dot" color={MUTED}> · </Text>,
+          <Text key="tokens" color={TEXT} bold>{tok(view.tokens)}</Text>,
+          <Text key="what" color={MUTED}> tokens a recachear</Text>,
         ]
       : [<Text key="left" color={hue} bold>{` restam ${Math.max(0, TTL_MIN - view.idleMin)}m`}</Text>]
 
@@ -328,12 +327,10 @@ export const register: Register = on => {
             <Box key="block" flexDirection="column" flexShrink={0} marginRight={2}>
               <Box flexDirection="row" alignItems="center">{badge}</Box>
               <Text color={hue} bold>{cold ? `${view.idle} ocioso` : `restam ${Math.max(0, TTL_MIN - view.idleMin)}m`}</Text>
-              {mine ? (
-                <Box flexDirection="row">
-                  <Text color={TEXT} bold>{usd(costOf(mine, mode, view.tokens))}</Text>
-                  <Text color={MUTED}> próxima</Text>
-                </Box>
-              ) : null}
+              <Box flexDirection="row">
+                <Text color={TEXT} bold>{tok(view.tokens)}</Text>
+                <Text color={MUTED}>{cold ? ' a recachear' : ' no cache'}</Text>
+              </Box>
             </Box>
           )}
           {grow}

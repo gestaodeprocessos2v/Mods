@@ -40,27 +40,6 @@ export const kindOf = (columns: number): Kind => (columns >= WIDE_AT ? 'wide' : 
  */
 export const bandPx = (columns: number): number => (columns + 5) * 12
 
-// $ per million tokens: input, and the cache read. The 1-hour cache write is 2 times
-// input. Haiku 5.5 is $0.10 up to 100K tokens and $0.50 above; long sessions use the
-// higher rate.
-export type Model = { id: string; NAME: string; input: number; read: number }
-export const MODELS: Model[] = [
-  { id: 'fable', NAME: 'FABLE', input: 10, read: 0.25 },
-  { id: 'opus', NAME: 'OPUS', input: 4, read: 0.2 },
-  { id: 'sonnet', NAME: 'SONNET', input: 2, read: 0.2 },
-  { id: 'haiku', NAME: 'HAIKU', input: 0.5, read: 0.05 },
-]
-
-/** Which row of MODELS a model id belongs to, or null for one the card doesn't price. */
-export const familyOf = (model: string | null | undefined): string | null => {
-  const m = (model ?? '').toLowerCase()
-  return MODELS.find(x => m.includes(x.id))?.id ?? null
-}
-
-export const coldCost = (m: Model, tokens: number): number => (tokens / 1e6) * m.input * 2
-export const warmCost = (m: Model, tokens: number): number => (tokens / 1e6) * m.read
-export const costOf = (m: Model, mode: Mode, tokens: number): number => (mode === 'cold' ? coldCost(m, tokens) : warmCost(m, tokens))
-export const usd = (n: number): string => '$' + n.toFixed(2)
 export const tok = (n: number): string => (n >= 1e6 ? `${Number((n / 1e6).toFixed(1))}M` : `${Math.round(n / 1000)}k`)
 
 /** Idle time the way the card writes it: 18m, 2h 5m, 3d 9h. */
@@ -83,11 +62,7 @@ export type CacheView = {
   tokens: number
   /** The model's context window. */
   window: number
-  /** This session's MODELS id, or null when the model isn't priced. */
-  mine: string | null
 }
-
-export const mineModel = (v: CacheView): Model | undefined => MODELS.find(m => m.id === v.mine)
 
 // ---------- SVG helpers ----------
 export const svgDoc = (w: number, h: number, body: string, font: boolean): string =>
@@ -98,7 +73,7 @@ export const svgDoc = (w: number, h: number, body: string, font: boolean): strin
   body +
   '</svg>'
 
-// ---------- Rounded chips (WARM, COLD, YOU) ----------
+// ---------- Rounded chips (WARM, COLD) ----------
 // A text background can't be rounded, so a chip is a small drawing. The mod can't
 // measure text, so each chip's size was measured once, in the
 // embedded font: width = the word plus 0.62 em of padding each side, height 1.65 em.
@@ -107,7 +82,6 @@ const CHIP: Record<string, { w: number; h: number }> = {
   'FRIO@13': { w: 51, h: 21 },
   'QUENTE@11': { w: 65, h: 18 },
   'FRIO@11': { w: 44, h: 18 },
-  'VOCÊ@10': { w: 41, h: 17 },
 }
 
 export const chipShapes = (x: number, y: number, word: string, fill: string, size: number, ls: number): { w: number; h: number; svg: string } => {
@@ -252,10 +226,11 @@ export const cardSvg = (v: CacheView, kind: Kind, W: number): { source: string; 
     return g
   }
 
-  // The conversation's size, as a dot grid of the context window.
+  // What the next message re-sends, in tokens, over a dot grid of the context window:
+  // cold, the whole context is written to the cache again; warm, it is read from it.
   const zoneSize = (x: number, y: number, w: number, o: { compact?: boolean } = {}) => {
     const share = v.window > 0 ? Math.min(1, v.tokens / v.window) : 0
-    let g = t(x, y + (o.compact ? 24 : 30), cold ? 'RECACHEAR' : 'NO CACHE', { ls: 1.4 })
+    let g = t(x, y + (o.compact ? 24 : 30), cold ? 'PRÓXIMA MENSAGEM RECACHEIA' : 'PRÓXIMA MENSAGEM LÊ DO CACHE', { ls: 1.4 })
     const big = (yy: number, bs: number, ts: number) =>
       `<text x="${x}" y="${yy}" font-weight="600" fill="${TEXT}"><tspan font-size="${bs}">${tok(v.tokens)}</tspan><tspan font-size="${ts}" font-weight="500" fill="${MUTED}" dx="7">tokens</tspan></text>`
     const grid = (gx: number, gy: number, cols: number, step: number) => {
@@ -275,53 +250,18 @@ export const cardSvg = (v: CacheView, kind: Kind, W: number): { source: string; 
     return g + big(y + 72, 38, 15) + grid(x, y + 90, cols, 9.6) + t(x, y + 120, `${Math.round(share * 100)}% do contexto de ${tok(v.window)}`, { size: 12, w: 500 })
   }
 
-  // What the next message costs, by model. One scale for both states (the cold
-  // write's top price), so a warm read shows as the tiny bar it is.
-  const zoneCost = (x: number, y: number, colW: number, o: { compact?: boolean } = {}) => {
-    const k = o.compact
-      ? { lab: 24, base: 100, rows: 6, step: 7, chip: 58, price: 88, name: 102 }
-      : { lab: 30, base: 116, rows: 8, step: 8, chip: 70, price: 104, name: 120 }
-    let g = t(x, y + k.lab, cold ? 'PRÓXIMA MENSAGEM CUSTA' : 'PRÓXIMA MENSAGEM, COM CACHE', { ls: 1.4 })
-    const top = Math.max(...MODELS.map(m => coldCost(m, v.tokens)))
-    MODELS.forEach((m, i) => {
-      const mine = m.id === v.mine
-      const n = top > 0 ? Math.max(1, Math.round((costOf(m, mode, v.tokens) / top) * k.rows)) : 1
-      const bx = x + i * colW
-      for (let r = 0; r < k.rows; r++)
-        for (let c = 0; c < 3; c++)
-          g += `<circle cx="${bx + 3 + c * 8}" cy="${y + k.base - r * k.step}" r="2.8" fill="${r < n ? (mine ? HUEM : MUTED) : EMPTY}"/>`
-      if (mine) g += chipShapes(bx + 30, y + k.chip, 'VOCÊ', HUEM, 10, 0.8).svg
-      g += t(bx + 30, y + k.price, usd(costOf(m, mode, v.tokens)), { size: 17, w: mine ? 700 : 500, fill: mine ? TEXT : MUTED })
-      g += t(bx + 30, y + k.name, m.NAME, { size: 11, w: 700, fill: mine ? HUEM : MUTED, ls: 0.8 })
-    })
-    return g
-  }
-
   let H: number
   let g: string
   if (kind === 'wide') {
     H = 132
-    // 92 px a model column on the page's full width; tighter near the switch point,
-    // where the last column still needs about 90 px for its price.
-    const colW = Math.min(92, Math.floor((W - 640 - 103) / 3))
-    g = zoneIdle(13, 0, 290, { header: true }) + vline(314, 18, H - 36) + zoneSize(340, 0, 260) + vline(614, 18, H - 36) + zoneCost(640, 0, colW)
+    g = zoneIdle(13, 0, 290, { header: true }) + vline(314, 18, H - 36) + zoneSize(340, 0, Math.min(400, W - 340 - 13))
   } else if (kind === 'stacked') {
-    H = 266
-    g =
-      zoneIdle(13, 0, 290, { header: true }) +
-      vline(314, 18, 96) +
-      zoneSize(340, 0, W - 340 - 13) +
-      hline(134) +
-      zoneCost(13, 134, Math.min(160, (W - 26) / 4))
+    H = 132
+    g = zoneIdle(13, 0, 290, { header: true }) + vline(314, 18, 96) + zoneSize(340, 0, W - 340 - 13)
   } else {
     // Narrow: the cache row above already shows Robo and the chip.
-    H = 296
-    g =
-      zoneIdle(13, 0, W - 26, { compact: true }) +
-      hline(110) +
-      zoneSize(13, 110, W - 26, { compact: true }) +
-      hline(180) +
-      zoneCost(13, 182, (W - 26) / 4, { compact: true })
+    H = 180
+    g = zoneIdle(13, 0, W - 26, { compact: true }) + hline(110) + zoneSize(13, 110, W - 26, { compact: true })
   }
   const h = H + CARD_TOP
   const body = `<rect width="${W}" height="${h}" fill="${BG}"/><g transform="translate(0 ${CARD_TOP})">` + hline(0) + g + '</g>'

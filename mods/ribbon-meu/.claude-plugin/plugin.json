@@ -1,0 +1,12 @@
+{
+  "name": "ribbon-meu",
+  "version": "0.1.0",
+  "description": "Versão personalizada do ribbon-pt: faixa acima do prompt com o uso das janelas de 5 horas e 7 dias, quando renovam, e o estado do cache.",
+  "author": {
+    "name": "Jay E (tradução local)",
+    "url": "https://robonuggets.com"
+  },
+  "homepage": "https://github.com/robonuggets/ribbon",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

@@ -9,6 +9,11 @@
       "name": "ribbon-pt",
       "source": "./mods/ribbon-pt",
       "description": "ribbon em português: uso restante, horários de renovação e se o cache está quente ou frio, com o custo da próxima mensagem."
+    },
+    {
+      "name": "ribbon-meu",
+      "source": "./mods/ribbon-meu",
+      "description": "Versão personalizada do ribbon-pt."
     }
   ]
 }

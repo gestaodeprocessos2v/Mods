@@ -1,3 +1,12 @@
+# Gerados pelo Claude Code
+.claude-plugin/types/
+**/.claude-plugin/types/
+.mcpb-cache/
+*.plugin
+
+# Dependências
+node_modules/
+
 # Sistema operacional
 .DS_Store
 Thumbs.db

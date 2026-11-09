@@ -81,4 +81,4 @@ Quem já instalou atualiza com `claude plugin update <nome-do-mod>`.
 | Mod | Descrição | Versão |
 |-----|-----------|--------|
 | [ribbon-pt](mods/ribbon-pt) | Faixa acima do prompt com o uso das janelas de 5h e 7 dias, quando renovam, e se o cache está quente ou frio com o custo da próxima mensagem | 1.0.4 |
-| [ribbon-meu](mods/ribbon-meu) | Versão personalizada do ribbon-pt (em desenvolvimento) | 0.1.0 |
+| [ribbon-meu](mods/ribbon-meu) | Versão personalizada do ribbon-pt: sem bolinhas e com indicador de contexto (CTX) | 0.2.0 |

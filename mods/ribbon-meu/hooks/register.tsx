@@ -1,16 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { CacheFacts, Fold, Window } from '../types'
+import type { CacheFacts, Ctx, Fold, Window } from '../types'
 import {
-  BG, EMPTY, HUE, INK, MUTED, ORANGE, ROBO_SIZE, TEXT, TTL_MIN, TTL_MS, WORD,
-  bandPx, cardSvg, chipSvg, costOf, familyOf, fmtIdle, kindOf, mineModel, roboSvg, usd,
+  BG, HUE, INK, MUTED, ORANGE, ROBO_SIZE, TEXT, TTL_MIN, TTL_MS, WORD,
+  bandPx, cardSvg, chipSvg, costOf, familyOf, fmtIdle, kindOf, mineModel, roboSvg, tok, usd,
 } from './cache-art'
 import type { CacheView } from './cache-art'
 
-// A band above the prompt in a warm dark look: card surface, cream text,
-// dot-matrix bars. Shows how much of each usage window is USED, 5-hour first, then
-// 7-day; each window is green up to 50% used, orange up to 75%, red above; a window with under 15% left adds a bold ALTO.
+// A band above the prompt in a warm dark look: card surface, cream text.
+// Shows how much of each usage window is USED, 5-hour first, then 7-day; each
+// window is green up to 50% used, orange up to 75%, red above; a window with
+// under 15% left adds a bold ALTO. Then CTX, the share of the context window in
+// use: green under 60%, orange from 60% to under 80%, red from 80%.
 //
 // After the first reply it also shows the prompt cache: WARM (red, Robo bobbing)
 // for an hour after the last request, then COLD (blue, Robo frozen) with what the
@@ -18,15 +20,14 @@ import type { CacheView } from './cache-art'
 // cold starts open, and a choice holds until the cache flips. Zero token cost:
 // it reads the engine's own figures and draws.
 
-const CELLS = 10
 const LOW_AT = 15
-const TIGHT_CELLS = 6
 /** How often the band redraws, so the countdown and the warm-to-cold flip stay current. */
 const TICK_MS = 30_000
 
 const windows = atom({ plugin: 'ribbon-meu', key: 'windows' } as const, [] as Window[])
 const cache = atom({ plugin: 'ribbon-meu', key: 'cache' } as const, null as CacheFacts | null)
 const fold = atom({ plugin: 'ribbon-meu', key: 'fold' } as const, null as Fold | null)
+const ctx = atom({ plugin: 'ribbon-meu', key: 'ctx' } as const, null as Ctx | null)
 
 const NAMES: Record<string, string> = { seven_day: '7D', five_hour: '5H', spend_limit: 'GASTO' }
 const ORDER: Record<string, number> = { five_hour: 0, seven_day: 1 }
@@ -34,15 +35,23 @@ const GREEN = '#5fb36b'
 const RED = '#e5484d'
 /** A window's colour by how much of it is used: green to 50%, orange to 75%, red above. */
 const colorOf = (used: number): string => (used <= 50 ? GREEN : used <= 75 ? ORANGE : RED)
+/** The context's colour by share used: green under 60%, orange from 60% to under 80%, red from 80%. */
+export const ctxColorOf = (pct: number): string => (pct < 60 ? GREEN : pct < 80 ? ORANGE : RED)
+
+/** The share of the context window in use, 0 to 100, or null while it is unknown. */
+export const ctxPct = (c: Ctx | null): number | null =>
+  c && c.window > 0 && c.tokens > 0 ? Math.min(100, (c.tokens / c.window) * 100) : null
 
 const clean = (list: readonly Window[]): Window[] =>
   list
     .map(w => ({ kind: w.kind, percentUsed: w.percentUsed, resetsAt: w.resetsAt }))
     .sort((a, b) => (ORDER[a.kind] ?? 9) - (ORDER[b.kind] ?? 9))
 
-const dots = (pct: number, cells: number): { on: string; off: string } => {
-  const n = Math.max(0, Math.min(cells, Math.round((pct / 100) * cells)))
-  return { on: '●'.repeat(n), off: '·'.repeat(cells - n) }
+/** The context figures from a usage reading, keeping the last known ones where it has none. */
+const nextCtx = (u: { tokens?: number; window: number }, c: Ctx | null): Ctx | null => {
+  const tokens = u.tokens && u.tokens > 0 ? u.tokens : (c?.tokens ?? 0)
+  const window = u.window || c?.window || 0
+  return tokens > 0 && window > 0 ? { tokens, window } : c
 }
 
 const fmtReset = (iso: string | undefined, now: number): string => {
@@ -74,12 +83,14 @@ export const viewOf = (c: CacheFacts | null, now: number): CacheView | null => {
 const pull = async ($: EngineInterface): Promise<void> => {
   const u = await $.session.usage()
   await update($, windows, () => clean(u.rateLimits))
+  await update($, ctx, c => nextCtx(u.context, c))
 }
 
 /** Fresh context figures from the engine onto the cache facts, when it has them. */
 const measure = async ($: EngineInterface, lastAt: number | null, model: string | null): Promise<void> => {
   const u = await $.session.usage()
   const m = model ?? (await $.session.model())
+  await update($, ctx, c => nextCtx(u.context, c))
   await update($, cache, c => ({
     lastAt: lastAt ?? c?.lastAt ?? 0,
     tokens: u.context.tokens && u.context.tokens > 0 ? u.context.tokens : (c?.tokens ?? 0),
@@ -99,6 +110,9 @@ export const register: Register = on => {
     if (e.changed.includes('rateLimits')) {
       await update($, windows, () => clean(e.rateLimits))
     }
+    if (e.changed.includes('context')) {
+      await update($, ctx, c => nextCtx(e.context, c))
+    }
     if (e.changed.includes('context') && e.context.tokens && e.context.tokens > 0) {
       const tokens = e.context.tokens
       await update($, cache, c => (c ? { ...c, tokens, window: e.context.window || c.window } : c))
@@ -112,6 +126,7 @@ export const register: Register = on => {
     if (e.source === 'clear' || e.source === 'compact') {
       await update($, cache, () => null)
       await update($, fold, () => null)
+      await update($, ctx, () => null)
     } else if ((e.source === 'resume' || e.source === 'fork') && typeof e.seconds_since_last_response === 'number') {
       const now = await $.clock.now()
       const lastAt = now - e.seconds_since_last_response * 1000
@@ -154,8 +169,10 @@ export const register: Register = on => {
     const list = await read($, windows)
     const now = await $.clock.now()
     const view = viewOf(await read($, cache), now)
+    const context = await read($, ctx)
+    const pct = ctxPct(context)
 
-    if (list.length === 0 && !view) {
+    if (list.length === 0 && !view && pct === null) {
       return (
         <Box backgroundColor={BG} paddingX={1}>
           <Text color={MUTED}>USO · aguardando a primeira resposta</Text>
@@ -166,7 +183,6 @@ export const register: Register = on => {
     const columns = e.props.bodyColumns ?? e.viewport?.columns ?? 100
     const kind = kindOf(columns)
     const isWide = kind === 'wide'
-    const cells = kind === 'tight' ? TIGHT_CELLS : CELLS
 
     const parts = (w: Window) => {
       const used = Math.min(100, Math.max(0, Math.round(w.percentUsed * 10) / 10))
@@ -175,21 +191,18 @@ export const register: Register = on => {
         left: 100 - used,
         col: colorOf(used),
         name: NAMES[w.kind] ?? w.kind.toUpperCase(),
-        d: dots(used, cells),
         reset: fmtReset(w.resetsAt, now),
       }
     }
 
     // Wide: every window on one row. Narrow: each window is a block of three
-    // lines (name and dots, percent used, reset time) so nothing wraps or clips.
+    // lines (name, percent used, reset time) so nothing wraps or clips.
     const wide = (w: Window, i: number) => {
       const p = parts(w)
       return (
         <Box key={`w-${i}`} flexDirection="row" flexShrink={0} marginRight={3}>
           <Text color={MUTED} bold>{p.name} </Text>
-          <Text color={p.col}>{p.d.on}</Text>
-          <Text color={EMPTY}>{p.d.off}</Text>
-          <Text color={p.col} bold> {p.used}% usado</Text>
+          <Text color={p.col} bold>{p.used}% usado</Text>
           {p.left < LOW_AT ? <Text color={TEXT} bold> ALTO</Text> : null}
           {p.reset ? <Text color={MUTED}> · {p.reset}</Text> : null}
         </Box>
@@ -200,11 +213,7 @@ export const register: Register = on => {
       const p = parts(w)
       return (
         <Box key={`w-${i}`} flexDirection="column" flexShrink={0} marginRight={3}>
-          <Box flexDirection="row">
-            <Text color={MUTED} bold>{p.name} </Text>
-            <Text color={p.col}>{p.d.on}</Text>
-            <Text color={EMPTY}>{p.d.off}</Text>
-          </Box>
+          <Text color={MUTED} bold>{p.name}</Text>
           <Box flexDirection="row">
             <Text color={p.col} bold>{p.used}% usado</Text>
             {p.left < LOW_AT ? <Text color={TEXT} bold> ALTO</Text> : null}
@@ -214,14 +223,38 @@ export const register: Register = on => {
       )
     }
 
+    // The context indicator, in the same shape as a window.
+    const contextItem = (() => {
+      if (pct === null || !context) return null
+      const shown = Math.round(pct * 10) / 10
+      const col = ctxColorOf(pct)
+      const size = `${tok(context.tokens)} de ${tok(context.window)}`
+      return isWide ? (
+        <Box key="ctx" flexDirection="row" flexShrink={0} marginRight={3}>
+          <Text color={MUTED} bold>CTX </Text>
+          <Text color={col} bold>{shown}% usado</Text>
+          <Text color={MUTED}> · {size}</Text>
+        </Box>
+      ) : (
+        <Box key="ctx" flexDirection="column" flexShrink={0} marginRight={3}>
+          <Text color={MUTED} bold>CTX</Text>
+          <Text color={col} bold>{shown}% usado</Text>
+          <Text color={MUTED}>{size}</Text>
+        </Box>
+      )
+    })()
+
     const label = (
       <Box key="label" flexShrink={0} marginRight={isWide ? 2 : 3}>
         <Text color={TEXT} bold>USO</Text>
       </Box>
     )
-    const usage = list.length > 0
-      ? list.map(isWide ? wide : stacked)
-      : [<Box key="wait" flexShrink={0} marginRight={3}><Text color={MUTED}>aguardando a primeira resposta</Text></Box>]
+    const usage = [
+      ...(list.length > 0
+        ? list.map(isWide ? wide : stacked)
+        : [<Box key="wait" flexShrink={0} marginRight={3}><Text color={MUTED}>aguardando a primeira resposta</Text></Box>]),
+      ...(contextItem ? [contextItem] : []),
+    ]
 
     // Before the first reply there is no cache to show: today's band, as it was.
     if (!view) {

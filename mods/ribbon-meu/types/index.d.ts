@@ -11,8 +11,11 @@ export type CacheFacts = { lastAt: number; tokens: number; window: number; model
 /** Whether the cache card is open, remembered only for the state it was set in. */
 export type Fold = { mode: 'warm' | 'cold'; open: boolean }
 
+/** The context window as last measured: tokens in use and the window's size. */
+export type Ctx = { tokens: number; window: number }
+
 declare module 'claude-code' {
   interface PluginState {
-    'ribbon-meu': { windows: Window[]; cache: CacheFacts | null; fold: Fold | null }
+    'ribbon-meu': { windows: Window[]; cache: CacheFacts | null; fold: Fold | null; ctx: Ctx | null }
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "ribbon-meu",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Versão personalizada do ribbon-pt: faixa acima do prompt com o uso das janelas de 5 horas e 7 dias, quando renovam, e o estado do cache.",
   "author": {
     "name": "Jay E (tradução local)",

@@ -17,6 +17,11 @@ quantos tokens a próxima mensagem vai recachear ou ler do cache.
 
 ## Mudanças em relação ao ribbon-pt
 
+### 0.3.1
+- A faixa não corta mais o fim (quente/frio e o botão Mostrar) em janelas médias: quando tudo
+  não cabe numa linha, o cache passa para a linha de baixo; em janelas estreitas, os itens viram
+  blocos de três linhas.
+
 ### 0.3.0
 - O custo em dólar (preços da API) foi trocado por tokens: a faixa mostra quantos tokens a
   próxima mensagem vai recachear (cache frio) ou ler do cache (cache quente).

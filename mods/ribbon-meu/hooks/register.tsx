@@ -180,8 +180,8 @@ export const register: Register = on => {
     }
 
     const columns = e.props.bodyColumns ?? e.viewport?.columns ?? 100
+    // The card's own layout still follows the width alone.
     const kind = kindOf(columns)
-    const isWide = kind === 'wide'
 
     const parts = (w: Window) => {
       const used = Math.min(100, Math.max(0, Math.round(w.percentUsed * 10) / 10))
@@ -194,8 +194,25 @@ export const register: Register = on => {
       }
     }
 
-    // Wide: every window on one row. Narrow: each window is a block of three
-    // lines (name, percent used, reset time) so nothing wraps or clips.
+    const ctxParts = pct !== null && context
+      ? { shown: Math.round(pct * 10) / 10, col: ctxColorOf(pct), size: `${tok(context.tokens)} de ${tok(context.window)}` }
+      : null
+
+    // How many cells the usage row takes with every item on one line: label,
+    // windows and CTX, each with its margin, plus the row's padding.
+    const windowCells = (w: Window): number => {
+      const p = parts(w)
+      return p.name.length + 1 + `${p.used}% usado`.length + (p.left < LOW_AT ? 5 : 0) + (p.reset ? 3 + p.reset.length : 0) + 3
+    }
+    const usageCells =
+      2 + 5 +
+      (list.length > 0 ? list.reduce((n, w) => n + windowCells(w), 0) : 33) +
+      (ctxParts ? `CTX ${ctxParts.shown}% usado · ${ctxParts.size}`.length + 3 : 0)
+    /** Room kept free so a slightly wider font or a longer figure does not clip. */
+    const SLACK = 4
+    const usageFits = usageCells + SLACK <= columns
+
+    // Inline: each item on one line (name, percent, reset). Block: three lines.
     const wide = (w: Window, i: number) => {
       const p = parts(w)
       return (
@@ -223,44 +240,46 @@ export const register: Register = on => {
     }
 
     // The context indicator, in the same shape as a window.
-    const contextItem = (() => {
-      if (pct === null || !context) return null
-      const shown = Math.round(pct * 10) / 10
-      const col = ctxColorOf(pct)
-      const size = `${tok(context.tokens)} de ${tok(context.window)}`
-      return isWide ? (
+    const contextItem = !ctxParts
+      ? null
+      : usageFits ? (
         <Box key="ctx" flexDirection="row" flexShrink={0} marginRight={3}>
           <Text color={MUTED} bold>CTX </Text>
-          <Text color={col} bold>{shown}% usado</Text>
-          <Text color={MUTED}> · {size}</Text>
+          <Text color={ctxParts.col} bold>{ctxParts.shown}% usado</Text>
+          <Text color={MUTED}> · {ctxParts.size}</Text>
         </Box>
       ) : (
         <Box key="ctx" flexDirection="column" flexShrink={0} marginRight={3}>
           <Text color={MUTED} bold>CTX</Text>
-          <Text color={col} bold>{shown}% usado</Text>
-          <Text color={MUTED}>{size}</Text>
+          <Text color={ctxParts.col} bold>{ctxParts.shown}% usado</Text>
+          <Text color={MUTED}>{ctxParts.size}</Text>
         </Box>
       )
-    })()
 
     const label = (
-      <Box key="label" flexShrink={0} marginRight={isWide ? 2 : 3}>
+      <Box key="label" flexShrink={0} marginRight={2}>
         <Text color={TEXT} bold>USO</Text>
       </Box>
     )
     const usage = [
       ...(list.length > 0
-        ? list.map(isWide ? wide : stacked)
+        ? list.map(usageFits ? wide : stacked)
         : [<Box key="wait" flexShrink={0} marginRight={3}><Text color={MUTED}>aguardando a primeira resposta</Text></Box>]),
       ...(contextItem ? [contextItem] : []),
     ]
+    // Wraps rather than clips where the estimate falls short.
+    const usageRow = (
+      <Box key="row" flexDirection="row" flexWrap="wrap" paddingX={1}>
+        {label}
+        {usage}
+      </Box>
+    )
 
-    // Before the first reply there is no cache to show: today's band, as it was.
+    // Before the first reply there is no cache to show.
     if (!view) {
       return (
-        <Box flexDirection="row" backgroundColor={BG} paddingX={1}>
-          {label}
-          {usage}
+        <Box flexDirection="column" backgroundColor={BG}>
+          {usageRow}
         </Box>
       )
     }
@@ -274,35 +293,44 @@ export const register: Register = on => {
     const toggle = () =>
       update($, fold, f => ({ mode, open: !(f && f.mode === mode ? f.open : mode === 'cold') }))
 
+    const chip = chipSvg(mode)
     const badge = Svg
       ? [
           <Svg key="robo" source={roboSvg(mode)} alt={cold ? 'Robo, congelado' : 'Robo, saltitando'} width={ROBO_SIZE} height={ROBO_SIZE} isInteractive />,
           <Text key="gap"> </Text>,
-          (() => {
-            const c = chipSvg(mode)
-            return <Svg key="chip" source={c.source} alt={WORD[mode]} width={c.w} height={c.h} />
-          })(),
+          <Svg key="chip" source={chip.source} alt={WORD[mode]} width={chip.w} height={chip.h} />,
         ]
       : [<Text key="chip" backgroundColor={hue} color={INK} bold>{` ${WORD[mode]} `}</Text>]
 
+    const idleText = ` ${view.idle}`
+    const leftText = ` restam ${Math.max(0, TTL_MIN - view.idleMin)}m`
     const summary = cold
       ? [
-          <Text key="idle" color={hue} bold>{` ${view.idle}`}</Text>,
+          <Text key="idle" color={hue} bold>{idleText}</Text>,
           <Text key="dot" color={MUTED}> · </Text>,
           <Text key="tokens" color={TEXT} bold>{tok(view.tokens)}</Text>,
           <Text key="what" color={MUTED}> tokens a recachear</Text>,
         ]
-      : [<Text key="left" color={hue} bold>{` restam ${Math.max(0, TTL_MIN - view.idleMin)}m`}</Text>]
+      : [<Text key="left" color={hue} bold>{leftText}</Text>]
 
+    const buttonLabel = open ? 'Ocultar' : 'Mostrar'
     const button = Svg ? (
       <Box key="fold" flexShrink={0} alignItems="flex-start">
-        <Button key="cache-fold" label={open ? 'Ocultar' : 'Mostrar'} onPress={toggle} />
+        <Button key="cache-fold" label={buttonLabel} onPress={toggle} />
       </Box>
     ) : null
     const grow = <Box key="grow" flexGrow={1} />
 
+    // Cells the cache summary and the button add to the row (a drawing counted
+    // at the 12 px a cell takes).
+    const badgeCells = Svg ? Math.ceil(ROBO_SIZE / 12) + 1 + Math.ceil(chip.w / 12) : WORD[mode].length + 2
+    const summaryCells = cold ? idleText.length + 3 + tok(view.tokens).length + 19 : leftText.length
+    const cacheCells = open ? 0 : badgeCells + summaryCells + 2
+    const buttonCells = Svg ? buttonLabel.length + 4 : 0
+
     let rows
-    if (kind === 'wide') {
+    if (usageFits && usageCells + cacheCells + buttonCells + SLACK <= columns) {
+      // Everything on one row.
       rows = (
         <Box key="row" flexDirection="row" paddingX={1} alignItems="center">
           {label}
@@ -317,33 +345,10 @@ export const register: Register = on => {
           {button}
         </Box>
       )
-    } else if (kind === 'stacked') {
-      // The cache becomes a third stacked block, the same shape as 7D and 5H.
-      rows = (
-        <Box key="row" flexDirection="row" paddingX={1}>
-          {label}
-          {usage}
-          {open ? null : (
-            <Box key="block" flexDirection="column" flexShrink={0} marginRight={2}>
-              <Box flexDirection="row" alignItems="center">{badge}</Box>
-              <Text color={hue} bold>{cold ? `${view.idle} ocioso` : `restam ${Math.max(0, TTL_MIN - view.idleMin)}m`}</Text>
-              <Box flexDirection="row">
-                <Text color={TEXT} bold>{tok(view.tokens)}</Text>
-                <Text color={MUTED}>{cold ? ' a recachear' : ' no cache'}</Text>
-              </Box>
-            </Box>
-          )}
-          {grow}
-          {button}
-        </Box>
-      )
     } else {
-      // Narrow: the cache gets its own row under the usage blocks.
+      // The cache gets its own row under the usage.
       rows = [
-        <Box key="row" flexDirection="row" paddingX={1}>
-          {label}
-          {usage}
-        </Box>,
+        usageRow,
         <Box key="cache" flexDirection="row" paddingX={1} alignItems="center">
           {badge}
           {summary}
